@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#8b5cf6">
+  <title>Li Muwan Fan Community</title>
+  <style>
+    *{box-sizing:border-box}body{margin:0;font-family:Arial,sans-serif;background:#faf7ff;color:#27213a}
+    header{padding:24px 18px;background:linear-gradient(135deg,#8b5cf6,#ec4899);color:white;text-align:center}
+    header h1{margin:0 0 6px;font-size:26px}header p{margin:0;opacity:.9}
+    main{max-width:700px;margin:auto;padding:18px}
+    .card{background:white;border-radius:18px;padding:18px;margin:14px 0;box-shadow:0 4px 18px #00000012}
+    input,textarea,button{width:100%;padding:12px;border-radius:12px;border:1px solid #ddd;margin:6px 0;font-size:15px}
+    button{border:0;background:#8b5cf6;color:white;font-weight:bold;cursor:pointer}
+    button.secondary{background:#eee;color:#333}
+    nav{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:14px 0}
+    nav button{font-size:13px;margin:0}.hidden{display:none}
+    .msg{padding:12px;background:#f5f0ff;border-radius:12px;margin:8px 0}
+    small{color:#777}
+  </style>
+</head>
+<body>
+<header>
+  <h1>🌸 Li Muwan Fan Community</h1>
+  <p>Tempat berkumpul para penggemar Li Muwan</p>
+</header>
+
+<main>
+  <section id="auth" class="card">
+    <h2>Masuk / Daftar</h2>
+    <input id="email" type="email" placeholder="Email">
+    <input id="password" type="password" placeholder="Password">
+    <button onclick="login()">Masuk</button>
+    <button class="secondary" onclick="register()">Daftar akun fan</button>
+    <p id="authStatus"><small>Belum masuk.</small></p>
+  </section>
+
+  <section id="app" class="hidden">
+    <nav>
+      <button onclick="show('home')">🏠 Beranda</button>
+      <button onclick="show('messages')">💬 Pesan Fan</button>
+      <button onclick="show('ranking')">🏆 Ranking</button>
+    </nav>
+
+    <div id="home" class="card">
+      <h2>🌷 Selamat datang!</h2>
+      <p>Komunitas penggemar Li Muwan. Galeri foto dan fitur upload akan kita tambahkan setelah tahap ini.</p>
+      <button onclick="logout()">Keluar</button>
+    </div>
+
+    <div id="messages" class="card hidden">
+      <h2>💬 Pesan Fan</h2>
+      <textarea id="messageText" maxlength="500" placeholder="Tulis pesan untuk komunitas..."></textarea>
+      <button onclick="sendMessage()">Kirim pesan</button>
+      <div id="messageList"></div>
+    </div>
+
+    <div id="ranking" class="card hidden">
+      <h2>🏆 Ranking Fan</h2>
+      <div id="rankingList">Memuat...</div>
+    </div>
+  </section>
+</main>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
+import {
+  getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword,
+  onAuthStateChanged, signOut
+} from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
+import {
+  getFirestore, doc, setDoc, addDoc, collection, query, orderBy, limit, getDocs
+} from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
+
+/* GANTI bagian ini dengan Firebase Web App config milikmu nanti. */
+const firebaseConfig = {
+  apiKey: "ISI_API_KEY",
+  authDomain: "ISI_AUTH_DOMAIN",
+  projectId: "ISI_PROJECT_ID",
+  storageBucket: "ISI_STORAGE_BUCKET",
+  messagingSenderId: "ISI_MESSAGING_SENDER_ID",
+  appId: "ISI_APP_ID"
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+
+window.login = async () => {
+  try {
+    await signInWithEmailAndPassword(auth, email.value, password.value);
+  } catch(e) { authStatus.innerHTML = "<small>Gagal masuk: " + e.message + "</small>"; }
+};
+
+window.register = async () => {
+  try {
+    const cred = await createUserWithEmailAndPassword(auth, email.value, password.value);
+    await setDoc(doc(db, "users", cred.user.uid), {role:"fan"});
+  } catch(e) { authStatus.innerHTML = "<small>Gagal daftar: " + e.message + "</small>"; }
+};
+
+window.logout = () => signOut(auth);
+
+window.show = (id) => {
+  for (const x of ["home","messages","ranking"]) document.getElementById(x).classList.toggle("hidden", x!==id);
+  if(id==="messages") loadMessages();
+  if(id==="ranking") loadRanking();
+};
+
+window.sendMessage = async () => {
+  const text = messageText.value.trim();
+  if(!text) return;
+  await addDoc(collection(db,"messages"), {text, uid:auth.currentUser.uid});
+  messageText.value="";
+  loadMessages();
+};
+
+async function loadMessages(){
+  const q=query(collection(db,"messages"), orderBy("__name__","desc"), limit(30));
+  const snap=await getDocs(q);
+  messageList.innerHTML="";
+  snap.forEach(d=>{ const x=d.data(); messageList.innerHTML += `<div class="msg">${escapeHtml(x.text)}</div>`; });
+}
+
+async function loadRanking(){
+  const q=query(collection(db,"ranking"), orderBy("points","desc"), limit(20));
+  const snap=await getDocs(q);
+  rankingList.innerHTML="";
+  let n=1;
+  snap.forEach(d=>{ const x=d.data(); rankingList.innerHTML += `<div class="msg">🏅 ${n++}. ${escapeHtml(x.name||"Fan")} — ${x.points||0} poin</div>`; });
+  if(!snap.size) rankingList.innerHTML="<small>Ranking belum memiliki data.</small>";
+}
+
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]));
+}
+
+onAuthStateChanged(auth, user=>{
+  auth.classList;
+  document.getElementById("auth").classList.toggle("hidden",!!user);
+  document.getElementById("app").classList.toggle("hidden",!user);
+  if(user) authStatus.innerHTML="<small>Masuk sebagai "+user.email+"</small>";
+});
+</script>
+</body>
+</html>
