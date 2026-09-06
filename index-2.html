@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#8b5cf6">
+<title>Li Muwan Fan Community</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:Arial,sans-serif;background:#faf7ff;color:#27213a}
+header{padding:24px 18px;background:linear-gradient(135deg,#8b5cf6,#ec4899);color:#fff;text-align:center}
+header h1{margin:0 0 6px;font-size:26px}
+header p{margin:0;opacity:.9}
+main{max-width:700px;margin:auto;padding:18px}
+.card{background:#fff;border-radius:18px;padding:18px;margin:14px 0;box-shadow:0 4px 18px #00000012}
+input,textarea,button{width:100%;padding:12px;border-radius:12px;border:1px solid #ddd;margin:6px 0;font-size:15px}
+button{border:0;background:#8b5cf6;color:#fff;font-weight:bold;cursor:pointer}
+button.secondary{background:#eee;color:#333}
+nav{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:14px 0}
+nav button{font-size:13px;margin:0}
+.hidden{display:none}
+.msg{padding:12px;background:#f5f0ff;border-radius:12px;margin:8px 0}
+.status{padding:10px;border-radius:10px;background:#f7f7f7;margin-top:8px}
+small{color:#777}
+</style>
+</head>
+<body>
+<header>
+<h1>🌸 Li Muwan Fan Community</h1>
+<p>Tempat berkumpul para penggemar Li Muwan</p>
+</header>
+
+<main>
+<section id="auth" class="card">
+<h2>🌷 Masuk / Daftar</h2>
+<input id="email" type="email" autocomplete="email" placeholder="Email kamu">
+<input id="password" type="password" autocomplete="current-password" placeholder="Password (minimal 6 karakter)">
+<button id="loginBtn">🔐 Masuk</button>
+<button id="registerBtn" class="secondary">✨ Daftar akun fan</button>
+<div id="authStatus" class="status"><small>Belum masuk.</small></div>
+</section>
+
+<section id="app" class="hidden">
+<nav>
+<button onclick="showPage('home')">🏠 Beranda</button>
+<button onclick="showPage('messages')">💬 Pesan Fan</button>
+<button onclick="showPage('ranking')">🏆 Ranking</button>
+</nav>
+
+<div id="home" class="card">
+<h2>🌸 Selamat datang!</h2>
+<p id="welcome"></p>
+<p>Komunitas penggemar Li Muwan. Fitur galeri dan upload foto akan kita tambahkan berikutnya.</p>
+<button id="logoutBtn">Keluar</button>
+</div>
+
+<div id="messages" class="card hidden">
+<h2>💬 Pesan Fan</h2>
+<textarea id="messageText" maxlength="500" placeholder="Tulis pesan untuk komunitas..."></textarea>
+<button id="sendBtn">Kirim pesan</button>
+<div id="messageList"></div>
+</div>
+
+<div id="ranking" class="card hidden">
+<h2>🏆 Ranking Fan</h2>
+<div id="rankingList">Memuat...</div>
+</div>
+</section>
+</main>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
+import {
+  getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword,
+  onAuthStateChanged, signOut
+} from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
+import {
+  getFirestore, doc, setDoc, addDoc, collection, query, orderBy, limit, getDocs
+} from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
+
+/* Firebase Config: masukkan API key Firebase milik project kamu di bagian apiKey. */
+const firebaseConfig = {
+  apiKey: "MASUKKAN_API_KEY_FIREBASE_DI_SINI",
+  authDomain: "li-muwan-fan-community.firebaseapp.com",
+  projectId: "li-muwan-fan-community",
+  storageBucket: "li-muwan-fan-community.firebasestorage.app",
+  messagingSenderId: "817203040720",
+  appId: "1:817203040720:web:9b1c17508fb05766e029d5"
+};
+
+const firebaseApp = initializeApp(firebaseConfig);
+const auth = getAuth(firebaseApp);
+const db = getFirestore(firebaseApp);
+
+const emailInput = document.getElementById("email");
+const passwordInput = document.getElementById("password");
+const authStatus = document.getElementById("authStatus");
+const authSection = document.getElementById("auth");
+const appSection = document.getElementById("app");
+const messageText = document.getElementById("messageText");
+const messageList = document.getElementById("messageList");
+const rankingList = document.getElementById("rankingList");
+const welcome = document.getElementById("welcome");
+
+function showStatus(text) {
+  authStatus.innerHTML = "<small>" + escapeHtml(text) + "</small>";
+}
+
+function friendlyError(code) {
+  const messages = {
+    "auth/invalid-email":"Format email tidak benar.",
+    "auth/weak-password":"Password terlalu lemah. Gunakan minimal 6 karakter.",
+    "auth/email-already-in-use":"Email ini sudah terdaftar. Silakan tekan Masuk.",
+    "auth/invalid-credential":"Email atau password salah.",
+    "auth/user-not-found":"Akun tidak ditemukan. Silakan Daftar terlebih dahulu.",
+    "auth/wrong-password":"Password salah.",
+    "auth/too-many-requests":"Terlalu banyak percobaan. Coba lagi nanti.",
+    "auth/network-request-failed":"Koneksi internet bermasalah."
+  };
+  return messages[code] || "Terjadi kesalahan. Coba lagi.";
+}
+
+async function login() {
+  const email = emailInput.value.trim();
+  const password = passwordInput.value;
+  if (!email || !password) {
+    showStatus("Isi email dan password terlebih dahulu.");
+    return;
+  }
+  try {
+    showStatus("Sedang masuk...");
+    await signInWithEmailAndPassword(auth, email, password);
+  } catch (e) {
+    showStatus("Gagal masuk: " + friendlyError(e.code));
+  }
+}
+
+async function register() {
+  const email = emailInput.value.trim();
+  const password = passwordInput.value;
+  if (!email || !password) {
+    showStatus("Isi email dan password terlebih dahulu.");
+    return;
+  }
+  if (password.length < 6) {
+    showStatus("Password minimal 6 karakter.");
+    return;
+  }
+  try {
+    showStatus("Membuat akun...");
+    const cred = await createUserWithEmailAndPassword(auth, email, password);
+    await setDoc(doc(db, "users", cred.user.uid), {
+      role: "fan",
+      email: email
+    });
+    showStatus("Akun berhasil dibuat. Selamat datang!");
+  } catch (e) {
+    showStatus("Gagal daftar: " + friendlyError(e.code));
+  }
+}
+
+document.getElementById("loginBtn").addEventListener("click", login);
+document.getElementById("registerBtn").addEventListener("click", register);
+document.getElementById("logoutBtn").addEventListener("click", () => signOut(auth));
+
+window.showPage = (id) => {
+  for (const x of ["home","messages","ranking"]) {
+    document.getElementById(x).classList.toggle("hidden", x !== id);
+  }
+  if (id === "messages") loadMessages();
+  if (id === "ranking") loadRanking();
+};
+
+document.getElementById("sendBtn").addEventListener("click", sendMessage);
+
+async function sendMessage() {
+  const user = auth.currentUser;
+  const text = messageText.value.trim();
+  if (!user || !text) return;
+  try {
+    await addDoc(collection(db, "messages"), {
+      text: text,
+      uid: user.uid
+    });
+    messageText.value = "";
+    loadMessages();
+  } catch (e) {
+    messageList.innerHTML = "<small>Pesan gagal dikirim.</small>";
+  }
+}
+
+async function loadMessages() {
+  try {
+    const q = query(collection(db, "messages"), orderBy("__name__", "desc"), limit(30));
+    const snap = await getDocs(q);
+    messageList.innerHTML = "";
+    snap.forEach(d => {
+      const x = d.data();
+      if (x.text) {
+        messageList.innerHTML += `<div class="msg">${escapeHtml(x.text)}</div>`;
+      }
+    });
+    if (!messageList.innerHTML) messageList.innerHTML = "<small>Belum ada pesan.</small>";
+  } catch (e) {
+    messageList.innerHTML = "<small>Pesan belum bisa dimuat.</small>";
+  }
+}
+
+async function loadRanking() {
+  try {
+    const q = query(collection(db, "ranking"), orderBy("points", "desc"), limit(20));
+    const snap = await getDocs(q);
+    rankingList.innerHTML = "";
+    let n = 1;
+    snap.forEach(d => {
+      const x = d.data();
+      rankingList.innerHTML += `<div class="msg">🏅 ${n++}. ${escapeHtml(x.name || "Fan")} — ${Number(x.points || 0)} poin</div>`;
+    });
+    if (!snap.size) rankingList.innerHTML = "<small>Ranking belum memiliki data.</small>";
+  } catch (e) {
+    rankingList.innerHTML = "<small>Ranking belum bisa dimuat.</small>";
+  }
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, m => ({
+    "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"
+  }[m]));
+}
+
+onAuthStateChanged(auth, user => {
+  authSection.classList.toggle("hidden", !!user);
+  appSection.classList.toggle("hidden", !user);
+  if (user) {
+    welcome.textContent = "Kamu masuk sebagai " + user.email + ". 🌸";
+  }
+});
+</script>
+</body>
+</html>
